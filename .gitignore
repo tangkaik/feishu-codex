@@ -1,0 +1,20 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.git.manual/
+
+# Local secrets
+.env
+
+# Runtime state
+.last_feishu_msg.json
+.codex_monitor_last_id.txt
+.pending_feishu_turns.json
+feishu_to_codex_daemon.pid
+
+# Logs
+*.log
+
+# Downloaded or generated message assets
+inbox/
+tmp/
