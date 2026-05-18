@@ -16,4 +16,5 @@ done
 
 rm -f /tmp/codex_monitor_last_id.txt
 
+echo "feishu-codex LaunchAgent 已移除。现在可以删除这个文件夹。"
 echo "feishu-codex launch agents removed. You can delete this folder now."

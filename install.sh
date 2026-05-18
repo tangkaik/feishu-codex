@@ -63,4 +63,5 @@ launchctl bootout "gui/$USER_ID" "$LAUNCH_AGENTS_DIR/com.kaitang.codex-feishu-ou
 launchctl bootstrap "gui/$USER_ID" "$LAUNCH_AGENTS_DIR/com.kaitang.feishu-codex.plist"
 launchctl bootstrap "gui/$USER_ID" "$LAUNCH_AGENTS_DIR/com.kaitang.codex-feishu-output.plist"
 
+echo "feishu-codex LaunchAgent 已安装。"
 echo "feishu-codex launch agents installed."
