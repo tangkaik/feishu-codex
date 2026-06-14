@@ -49,6 +49,15 @@ def send_feishu(text: str) -> bool:
     return send_to_feishu.send_codex_output(text)
 
 
+def parse_sse_json(log_body: str) -> dict:
+    for prefix in ['SSE event: ', 'Received message ']:
+        json_start = log_body.find(prefix)
+        if json_start != -1:
+            json_str = log_body[json_start + len(prefix):]
+            return json.loads(json_str)
+    return {}
+
+
 def extract_output_from_log(log_body: str) -> str:
     """从日志中提取 Codex 的输出文本"""
     if not log_body:
@@ -58,26 +67,73 @@ def extract_output_from_log(log_body: str) -> str:
     # 1. SSE event: {"type":"response.output_item.done","item":{"content":[{"type":"output_text","text":"..."}]}}
     # 2. Received message {"type":"response.output_item.done","item":{"content":[{"type":"output_text","text":"..."}]}}
     try:
-        # 找到 JSON 部分（两种前缀都支持）
-        for prefix in ['SSE event: ', 'Received message ']:
-            json_start = log_body.find(prefix)
-            if json_start != -1:
-                json_str = log_body[json_start + len(prefix):]
-                import json as json_module
-                data = json_module.loads(json_str)
-
-                # 提取 text 字段
-                item = data.get("item", {})
-                content = item.get("content", [])
-                for c in content:
-                    if c.get("type") == "output_text":
-                        text = c.get("text", "")
-                        if text:
-                            return text.strip()
+        data = parse_sse_json(log_body)
+        item = data.get("item", {})
+        content = item.get("content", [])
+        for c in content:
+            if c.get("type") == "output_text":
+                text = c.get("text", "")
+                if text:
+                    return text.strip()
     except:
         pass
 
     return ""
+
+
+def extract_delta_from_log(log_body: str) -> str:
+    """从流式 output_text.delta 日志中提取增量文本。"""
+    if not log_body:
+        return ""
+    try:
+        data = parse_sse_json(log_body)
+        if data.get("type") == "response.output_text.delta":
+            return data.get("delta", "")
+    except:
+        pass
+    return ""
+
+
+def collect_output_from_rows(rows, last_id):
+    """从新增日志行中收集完整输出，并决定检查点应推进到哪里。"""
+    new_max_id = last_id
+    output_buffer = []
+    saw_completion = False
+    saw_streaming_output = False
+    saw_legacy_done_output = False
+
+    for row in rows:
+        row_id, ts, level, target, body = row
+        new_max_id = max(new_max_id, row_id)
+        if not body:
+            continue
+
+        if "turn/completed" in body or "response.completed" in body:
+            saw_completion = True
+            if "turn/completed" in body:
+                print(f"\n🔔 检测到 turn/completed 事件 (id={row_id})")
+
+        if "response.output_item.done" in body:
+            output = extract_output_from_log(body)
+            if output:
+                output_buffer.append(output)
+                saw_legacy_done_output = True
+                print(f"📝 提取到输出 ({len(output)} 字符)")
+            continue
+
+        if "response.output_text.delta" in body:
+            delta = extract_delta_from_log(body)
+            if delta:
+                output_buffer.append(delta)
+                saw_streaming_output = True
+
+    if output_buffer and (saw_legacy_done_output or saw_completion):
+        return new_max_id, "".join(output_buffer).strip()
+
+    if saw_streaming_output and not saw_completion:
+        return last_id, ""
+
+    return new_max_id, ""
 
 
 def check_for_turn_completed():
@@ -113,29 +169,10 @@ def check_for_turn_completed():
         if not rows:
             return
 
-        new_max_id = last_id
-        output_buffer = []
-        in_turn = False
-
-        for row in rows:
-            row_id, ts, level, target, body = row
-            new_max_id = max(new_max_id, row_id)
-
-            if body and "turn/completed" in body:
-                # 发现 turn/completed 事件
-                in_turn = True
-                print(f"\n🔔 检测到 turn/completed 事件 (id={row_id})")
-
-            if body and "response.output_item.done" in body:
-                # 提取输出文本
-                output = extract_output_from_log(body)
-                if output:
-                    output_buffer.append(output)
-                    print(f"📝 提取到输出 ({len(output)} 字符)")
+        new_max_id, full_output = collect_output_from_rows(rows, last_id)
 
         # 如果检测到完整的 turn，发送飞书
-        if output_buffer:
-            full_output = "\n\n---\n\n".join(output_buffer)
+        if full_output:
             print(f"📤 发送 {len(full_output)} 字符到飞书...")
             send_feishu(full_output)
 
