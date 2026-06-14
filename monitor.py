@@ -14,24 +14,42 @@ import send_to_feishu
 
 # ========== 配置 ==========
 
-CODEX_LOG_DB = Path.home() / ".codex" / "logs_2.sqlite"
 POLL_INTERVAL = 2  # 秒
 WORK_DIR = Path(__file__).resolve().parent
 LAST_CHECKPOINT_FILE = WORK_DIR / ".codex_monitor_last_id.txt"
 
-def get_last_checked_id():
+
+def get_codex_log_db():
+    new_path = Path.home() / ".codex" / "sqlite" / "logs_2.sqlite"
+    if new_path.exists():
+        return new_path
+    return Path.home() / ".codex" / "logs_2.sqlite"
+
+
+CODEX_LOG_DB = get_codex_log_db()
+
+
+def get_checkpoint_file(log_db=None):
+    log_db = Path(log_db or CODEX_LOG_DB)
+    if log_db.parent.name == "sqlite":
+        return WORK_DIR / ".codex_monitor_last_id_sqlite.txt"
+    return LAST_CHECKPOINT_FILE
+
+
+def get_last_checked_id(log_db=None):
     """获取上次检查到的最大日志 ID"""
-    if LAST_CHECKPOINT_FILE.exists():
+    checkpoint_file = get_checkpoint_file(log_db)
+    if checkpoint_file.exists():
         try:
-            return int(LAST_CHECKPOINT_FILE.read_text().strip())
+            return int(checkpoint_file.read_text().strip())
         except:
             pass
     return None
 
 
-def save_last_checked_id(last_id):
+def save_last_checked_id(last_id, log_db=None):
     """保存检查到的最大日志 ID"""
-    LAST_CHECKPOINT_FILE.write_text(str(last_id))
+    get_checkpoint_file(log_db).write_text(str(last_id))
 
 
 def send_feishu(text: str) -> bool:
@@ -138,12 +156,13 @@ def collect_output_from_rows(rows, last_id):
 
 def check_for_turn_completed():
     """检查日志中是否有新的 turn/completed 事件"""
-    if not CODEX_LOG_DB.exists():
-        print(f"❌ 日志文件不存在: {CODEX_LOG_DB}")
+    log_db = get_codex_log_db()
+    if not log_db.exists():
+        print(f"❌ 日志文件不存在: {log_db}")
         return
 
-    last_id = get_last_checked_id()
-    conn = sqlite3.connect(CODEX_LOG_DB, timeout=5)
+    last_id = get_last_checked_id(log_db)
+    conn = sqlite3.connect(log_db, timeout=5)
     cursor = conn.cursor()
 
     try:
@@ -152,7 +171,7 @@ def check_for_turn_completed():
             cursor.execute("SELECT MAX(id) FROM logs")
             max_id = cursor.fetchone()[0]
             if max_id:
-                save_last_checked_id(max_id)
+                save_last_checked_id(max_id, log_db)
                 print(f"📍 初始化检查点: id={max_id}")
             return
 
@@ -177,7 +196,7 @@ def check_for_turn_completed():
             send_feishu(full_output)
 
         # 更新检查点
-        save_last_checked_id(new_max_id)
+        save_last_checked_id(new_max_id, log_db)
 
     finally:
         conn.close()
@@ -186,7 +205,7 @@ def check_for_turn_completed():
 def main():
     print("=" * 50)
     print("🚀 Codex 日志监控启动")
-    print(f"📁 日志文件: {CODEX_LOG_DB}")
+    print(f"📁 日志文件: {get_codex_log_db()}")
     print(f"⏱️ 轮询间隔: {POLL_INTERVAL} 秒")
     print("=" * 50)
 
