@@ -9,6 +9,7 @@ __pycache__/
 # Runtime state
 .last_feishu_msg.json
 .codex_monitor_last_id.txt
+.codex_monitor_last_id_sqlite.txt
 .pending_feishu_turns.json
 feishu_to_codex_daemon.pid
 
