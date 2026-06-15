@@ -8,10 +8,7 @@ int main(int argc, char **argv) {
     }
 
     double x = atof(argv[1]);
-    double appleScriptY = atof(argv[2]);
-    CGRect displayBounds = CGDisplayBounds(CGMainDisplayID());
-    double displayHeight = displayBounds.size.height;
-    double y = displayHeight - appleScriptY;
+    double y = atof(argv[2]);
     CGPoint point = CGPointMake(x, y);
 
     CGEventRef down = CGEventCreateMouseEvent(

@@ -54,6 +54,39 @@ def build_focus_applescript() -> str:
     '''
 
 
+def build_dismiss_edit_applescript() -> str:
+    """返回编辑模式中“取消”按钮常见位置的坐标。"""
+    return '''
+    tell application "Codex"
+        activate
+    end tell
+
+    tell application "System Events"
+        repeat with i from 1 to 20
+            if exists process "Codex" then
+                tell process "Codex"
+                    if frontmost and (count windows) > 0 then exit repeat
+                end tell
+            end if
+            delay 0.2
+        end repeat
+
+        if not (exists process "Codex") then error "Codex process not available"
+        tell process "Codex"
+            if not frontmost then error "Codex is not frontmost"
+            if (count windows) = 0 then error "Codex window not available"
+
+            set windowPosition to position of window 1
+            set windowSize to size of window 1
+            set cancelX to ((item 1 of windowPosition) + (item 1 of windowSize) - 180) as integer
+            set cancelY to ((item 2 of windowPosition) + 150) as integer
+        end tell
+
+        return (cancelX as text) & "," & (cancelY as text)
+    end tell
+    '''
+
+
 def build_submit_applescript(paste_delay: float) -> str:
     """生成粘贴并提交的 AppleScript。"""
     return f'''
@@ -131,25 +164,10 @@ def ensure_click_helper() -> bool:
     return True
 
 
-def focus_codex_input() -> bool:
-    """激活 Codex，并用底层鼠标事件点击底部输入框。"""
+def click_screen_coordinate(x: str, y: str) -> bool:
+    """用底层鼠标事件点击 AppleScript 返回的屏幕坐标。"""
     if not ensure_click_helper():
         return False
-    try:
-        result = run_applescript(build_focus_applescript(), timeout=8)
-    except subprocess.TimeoutExpired:
-        print("❌ 获取 Codex 输入框坐标超时")
-        return False
-    if result.returncode != 0:
-        print(f"❌ 获取 Codex 输入框坐标失败: {result.stderr.strip()}")
-        return False
-
-    try:
-        x, y = [part.strip() for part in result.stdout.strip().split(",", 1)]
-    except ValueError:
-        print(f"❌ Codex 输入框坐标格式异常: {result.stdout.strip()}")
-        return False
-
     click = subprocess.run(
         [str(CLICK_HELPER), x, y],
         capture_output=True,
@@ -161,6 +179,34 @@ def focus_codex_input() -> bool:
         return False
     time.sleep(0.3)
     return True
+
+
+def click_coordinate_from_script(script: str, label: str) -> bool:
+    try:
+        result = run_applescript(script, timeout=8)
+    except subprocess.TimeoutExpired:
+        print(f"❌ 获取 {label} 坐标超时")
+        return False
+    if result.returncode != 0:
+        print(f"❌ 获取 {label} 坐标失败: {result.stderr.strip()}")
+        return False
+
+    try:
+        x, y = [part.strip() for part in result.stdout.strip().split(",", 1)]
+    except ValueError:
+        print(f"❌ {label} 坐标格式异常: {result.stdout.strip()}")
+        return False
+    return click_screen_coordinate(x, y)
+
+
+def dismiss_edit_mode() -> bool:
+    """如果当前处于编辑上一条消息状态，先点击“取消”。"""
+    return click_coordinate_from_script(build_dismiss_edit_applescript(), "Codex 编辑取消按钮")
+
+
+def focus_codex_input() -> bool:
+    """激活 Codex，并用底层鼠标事件点击底部输入框。"""
+    return click_coordinate_from_script(build_focus_applescript(), "Codex 输入框")
 
 
 def set_clipboard(text: str) -> bool:
@@ -182,6 +228,7 @@ def input_image_to_codex(image_path: str, upload_delay: float = 5.0) -> bool:
         if clipboard.returncode != 0:
             print(f"❌ 设置图片剪贴板失败: {clipboard.stderr.strip()}")
             return False
+        dismiss_edit_mode()
         if not focus_codex_input():
             return False
         result = run_applescript(
@@ -221,6 +268,7 @@ def input_to_codex(text: str) -> bool:
         time.sleep(0.3)
 
         # 2. 激活 Codex → 点击底部输入框 → 粘贴 → 回车
+        dismiss_edit_mode()
         if not focus_codex_input():
             return False
         result = run_applescript(

@@ -43,11 +43,19 @@ class CodexInputTest(unittest.TestCase):
         self.assertIn("delay 5.0", submit_script)
         self.assertIn("key code 36", submit_script)
 
-    def test_click_helper_converts_applescript_y_coordinate(self):
+    def test_dismiss_edit_applescript_returns_cancel_button_area(self):
+        script = codex_input.build_dismiss_edit_applescript()
+
+        self.assertIn("cancelX", script)
+        self.assertIn("cancelY", script)
+        self.assertIn('return (cancelX as text) & "," & (cancelY as text)', script)
+        self.assertNotIn("key code 53", script)
+
+    def test_click_helper_uses_applescript_screen_coordinates_directly(self):
         source = Path("click_helper.c").read_text()
 
-        self.assertIn("CGDisplayBounds", source)
-        self.assertIn("displayHeight - appleScriptY", source)
+        self.assertNotIn("CGDisplayBounds", source)
+        self.assertIn("CGPointMake(x, y)", source)
 
 
 if __name__ == "__main__":
