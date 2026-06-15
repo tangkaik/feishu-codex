@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 import codex_input
 
@@ -41,6 +42,12 @@ class CodexInputTest(unittest.TestCase):
         self.assertIn('keystroke "v" using command down', submit_script)
         self.assertIn("delay 5.0", submit_script)
         self.assertIn("key code 36", submit_script)
+
+    def test_click_helper_converts_applescript_y_coordinate(self):
+        source = Path("click_helper.c").read_text()
+
+        self.assertIn("CGDisplayBounds", source)
+        self.assertIn("displayHeight - appleScriptY", source)
 
 
 if __name__ == "__main__":
