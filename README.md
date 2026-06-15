@@ -51,6 +51,14 @@ FEISHU_CODEX_REQUIRE_PREFIX=true
 
 默认不要求前缀。这个工具只会监听 `FEISHU_CHAT_ID` 里的 `FEISHU_OWNER_USER_ID`。
 
+如果飞书群里机器人回传消息很多，可以调整每次轮询读取的最近消息数量：
+
+```text
+FEISHU_POLL_PAGE_SIZE=50
+```
+
+飞书 API 当前最多支持 50。默认值也是 50。
+
 ### 单次运行
 
 飞书到 Codex：
@@ -170,6 +178,14 @@ FEISHU_CODEX_REQUIRE_PREFIX=true
 ```
 
 By default, no prefix is required. The bridge only listens to `FEISHU_OWNER_USER_ID` inside `FEISHU_CHAT_ID`.
+
+If the Feishu group has many bot reply messages, you can tune how many recent messages each poll reads:
+
+```text
+FEISHU_POLL_PAGE_SIZE=50
+```
+
+The Feishu API currently supports up to 50. The default is also 50.
 
 ### Run Once
 

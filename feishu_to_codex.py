@@ -67,13 +67,22 @@ def get_chat_id():
     return os.environ.get("FEISHU_CHAT_ID", DEFAULT_CHAT_ID)
 
 
+def get_poll_page_size():
+    try:
+        page_size = int(os.environ.get("FEISHU_POLL_PAGE_SIZE", "50"))
+    except ValueError:
+        page_size = 50
+    return min(50, max(10, page_size))
+
+
 def get_recent_messages(token):
-    """获取群最近消息（最多10条，按时间正序）"""
+    """获取群最近消息（按时间正序）"""
     import urllib.request
     chat_id = get_chat_id()
+    page_size = get_poll_page_size()
     url = (f"https://open.feishu.cn/open-apis/im/v1/messages"
            f"?container_id_type=chat&container_id={chat_id}"
-           f"&sort_type=ByCreateTimeDesc&page_size=10")
+           f"&sort_type=ByCreateTimeDesc&page_size={page_size}")
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     try:
         with urllib.request.urlopen(req, timeout=10) as r:

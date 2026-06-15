@@ -2,6 +2,7 @@ import json
 import os
 import unittest
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 import feishu_to_codex
 
@@ -33,6 +34,29 @@ def image_message(message_id, create_time, sender_id, image_key, chat_id=None):
 
 
 class FeishuMessageSelectionTest(unittest.TestCase):
+    def test_recent_message_page_size_defaults_to_50(self):
+        requests = []
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps({"code": 0, "data": {"items": []}}).encode("utf-8")
+
+        def fake_urlopen(req, timeout=10):
+            requests.append(req)
+            return FakeResponse()
+
+        with patch("urllib.request.urlopen", fake_urlopen):
+            feishu_to_codex.get_recent_messages("token")
+
+        query = parse_qs(urlparse(requests[0].full_url).query)
+        self.assertEqual(query["page_size"], ["50"])
+
     def test_selects_only_new_owner_text_from_target_chat(self):
         messages = [
             text_message("old-owner", 100, feishu_to_codex.OWNER_USER_ID, "old", feishu_to_codex.CHAT_ID),
