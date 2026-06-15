@@ -147,6 +147,35 @@ class FeishuMessageSelectionTest(unittest.TestCase):
             [{"id": "target", "time": 800.0, "type": "text", "text": "hello"}],
         )
 
+    def test_only_successful_codex_delivery_advances_message_state(self):
+        state = {}
+        message = {"id": "msg-ok", "time": 900.0}
+
+        saved = feishu_to_codex.record_processed_message(
+            state,
+            message,
+            returncode=0,
+            state_file=None,
+        )
+
+        self.assertTrue(saved)
+        self.assertEqual(state["last_msg_id"], "msg-ok")
+        self.assertEqual(state["last_msg_time"], 900.0)
+
+    def test_failed_codex_delivery_does_not_advance_message_state(self):
+        state = {"last_msg_id": "old", "last_msg_time": 100.0}
+        message = {"id": "failed", "time": 900.0}
+
+        saved = feishu_to_codex.record_processed_message(
+            state,
+            message,
+            returncode=1,
+            state_file=None,
+        )
+
+        self.assertFalse(saved)
+        self.assertEqual(state, {"last_msg_id": "old", "last_msg_time": 100.0})
+
 
 if __name__ == "__main__":
     unittest.main()

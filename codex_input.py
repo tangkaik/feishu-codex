@@ -41,14 +41,10 @@ def build_applescript(paste_delay: float) -> str:
 
             set windowPosition to position of window 1
             set windowSize to size of window 1
-            set inputX to (item 1 of windowPosition) + ((item 1 of windowSize) / 2)
-            set inputY to (item 2 of windowPosition) + (item 2 of windowSize) - 55
+            set inputX to ((item 1 of windowPosition) + ((item 1 of windowSize) / 2)) as integer
+            set inputY to ((item 2 of windowPosition) + (item 2 of windowSize) - 55) as integer
         end tell
 
-        key code 53
-        delay 0.2
-        key code 53
-        delay 0.2
         click at {{inputX, inputY}}
         delay 0.3
         keystroke "v" using command down
@@ -95,14 +91,10 @@ def build_image_applescript(image_path: str, upload_delay: float) -> str:
 
             set windowPosition to position of window 1
             set windowSize to size of window 1
-            set inputX to (item 1 of windowPosition) + ((item 1 of windowSize) / 2)
-            set inputY to (item 2 of windowPosition) + (item 2 of windowSize) - 55
+            set inputX to ((item 1 of windowPosition) + ((item 1 of windowSize) / 2)) as integer
+            set inputY to ((item 2 of windowPosition) + (item 2 of windowSize) - 55) as integer
         end tell
 
-        key code 53
-        delay 0.2
-        key code 53
-        delay 0.2
         click at {{inputX, inputY}}
         delay 0.3
         keystroke "v" using command down

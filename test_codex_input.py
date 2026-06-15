@@ -13,14 +13,15 @@ class CodexInputTest(unittest.TestCase):
     def test_paste_delay_is_capped(self):
         self.assertEqual(codex_input.calculate_paste_delay("x" * 100000), 3.0)
 
-    def test_applescript_checks_frontmost_window_before_paste(self):
+    def test_applescript_clicks_bottom_input_without_escape(self):
         script = codex_input.build_applescript(1.2)
 
         self.assertIn('process "Codex"', script)
         self.assertIn("frontmost", script)
         self.assertIn("count windows", script)
         self.assertIn('error "Codex window not available"', script)
-        self.assertIn("key code 53", script)
+        self.assertIn("as integer", script)
+        self.assertNotIn("key code 53", script)
         self.assertIn("click at {inputX, inputY}", script)
         self.assertIn("delay 1.2", script)
 
@@ -29,7 +30,8 @@ class CodexInputTest(unittest.TestCase):
 
         self.assertIn('POSIX file "/tmp/example.png"', script)
         self.assertIn('tell application "Finder"', script)
-        self.assertIn("key code 53", script)
+        self.assertIn("as integer", script)
+        self.assertNotIn("key code 53", script)
         self.assertIn("click at {inputX, inputY}", script)
         self.assertIn('keystroke "v" using command down', script)
         self.assertIn("delay 5.0", script)

@@ -205,6 +205,18 @@ def download_image(token, message_id, image_key):
         return None
 
 
+def record_processed_message(state, message, returncode, state_file=STATE_FILE):
+    """Only advance the checkpoint after Codex GUI delivery succeeds."""
+    if returncode != 0:
+        return False
+
+    state["last_msg_id"] = message["id"]
+    state["last_msg_time"] = message["time"]
+    if state_file is not None:
+        state_file.write_text(json.dumps(state))
+    return True
+
+
 def main():
     # 加载上次处理状态
     state = {}
@@ -258,11 +270,10 @@ def main():
         else:
             detail = (result.stderr or result.stdout or "").strip()
             log(f"  ❌ 失败: {detail[:500]}")
+            log("  ⏳ 未更新飞书消息状态，下一轮会重试")
+            break
 
-        # 更新状态（每条都保存）
-        state["last_msg_id"] = m["id"]
-        state["last_msg_time"] = m["time"]
-        STATE_FILE.write_text(json.dumps(state))
+        record_processed_message(state, m, result.returncode)
 
     log("完成")
 
