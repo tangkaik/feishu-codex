@@ -20,6 +20,8 @@ class CodexInputTest(unittest.TestCase):
         self.assertIn("frontmost", script)
         self.assertIn("count windows", script)
         self.assertIn('error "Codex window not available"', script)
+        self.assertIn("key code 53", script)
+        self.assertIn("click at {inputX, inputY}", script)
         self.assertIn("delay 1.2", script)
 
     def test_image_applescript_copies_file_and_waits_before_submit(self):
@@ -27,6 +29,8 @@ class CodexInputTest(unittest.TestCase):
 
         self.assertIn('POSIX file "/tmp/example.png"', script)
         self.assertIn('tell application "Finder"', script)
+        self.assertIn("key code 53", script)
+        self.assertIn("click at {inputX, inputY}", script)
         self.assertIn('keystroke "v" using command down', script)
         self.assertIn("delay 5.0", script)
         self.assertIn("key code 36", script)

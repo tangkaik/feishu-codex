@@ -38,8 +38,19 @@ def build_applescript(paste_delay: float) -> str:
         tell process "Codex"
             if not frontmost then error "Codex is not frontmost"
             if (count windows) = 0 then error "Codex window not available"
+
+            set windowPosition to position of window 1
+            set windowSize to size of window 1
+            set inputX to (item 1 of windowPosition) + ((item 1 of windowSize) / 2)
+            set inputY to (item 2 of windowPosition) + (item 2 of windowSize) - 55
         end tell
 
+        key code 53
+        delay 0.2
+        key code 53
+        delay 0.2
+        click at {{inputX, inputY}}
+        delay 0.3
         keystroke "v" using command down
         delay {paste_delay:.1f}
         key code 36
@@ -81,8 +92,19 @@ def build_image_applescript(image_path: str, upload_delay: float) -> str:
         tell process "Codex"
             if not frontmost then error "Codex is not frontmost"
             if (count windows) = 0 then error "Codex window not available"
+
+            set windowPosition to position of window 1
+            set windowSize to size of window 1
+            set inputX to (item 1 of windowPosition) + ((item 1 of windowSize) / 2)
+            set inputY to (item 2 of windowPosition) + (item 2 of windowSize) - 55
         end tell
 
+        key code 53
+        delay 0.2
+        key code 53
+        delay 0.2
+        click at {{inputX, inputY}}
+        delay 0.3
         keystroke "v" using command down
         delay {upload_delay:.1f}
         key code 36
