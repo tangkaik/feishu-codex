@@ -12,6 +12,7 @@ __pycache__/
 .codex_monitor_last_id_sqlite.txt
 .pending_feishu_turns.json
 feishu_to_codex_daemon.pid
+.feishu_codex_click
 
 # Logs
 *.log

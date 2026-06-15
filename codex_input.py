@@ -11,15 +11,19 @@ import sys
 import time
 from pathlib import Path
 
+WORK_DIR = Path(__file__).resolve().parent
+CLICK_HELPER_SOURCE = WORK_DIR / "click_helper.c"
+CLICK_HELPER = WORK_DIR / ".feishu_codex_click"
+
 
 def calculate_paste_delay(text: str) -> float:
     """长文本粘贴后给 Codex 输入框更多消化时间。"""
     return min(3.0, max(0.5, len(text) / 2500))
 
 
-def build_applescript(paste_delay: float) -> str:
-    """生成更保守的 Codex GUI 输入脚本。"""
-    return f'''
+def build_focus_applescript() -> str:
+    """激活 Codex 并返回底部输入框附近的屏幕坐标。"""
+    return '''
     tell application "Codex"
         activate
     end tell
@@ -45,8 +49,15 @@ def build_applescript(paste_delay: float) -> str:
             set inputY to ((item 2 of windowPosition) + (item 2 of windowSize) - 55) as integer
         end tell
 
-        click at {{inputX, inputY}}
-        delay 0.3
+        return (inputX as text) & "," & (inputY as text)
+    end tell
+    '''
+
+
+def build_submit_applescript(paste_delay: float) -> str:
+    """生成粘贴并提交的 AppleScript。"""
+    return f'''
+    tell application "System Events"
         keystroke "v" using command down
         delay {paste_delay:.1f}
         key code 36
@@ -56,54 +67,100 @@ def build_applescript(paste_delay: float) -> str:
     '''
 
 
+def build_applescript(paste_delay: float) -> str:
+    """保留给测试和兼容用途：实际运行会拆分点击与粘贴。"""
+    return build_focus_applescript() + "\n" + build_submit_applescript(paste_delay)
+
+
 def applescript_string(value: str) -> str:
     """转义 AppleScript 字符串。"""
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def build_image_applescript(image_path: str, upload_delay: float) -> str:
-    """生成图片文件粘贴脚本。"""
+def build_image_clipboard_applescript(image_path: str) -> str:
+    """生成把图片文件放入剪贴板的脚本。"""
     escaped_path = applescript_string(image_path)
     return f'''
     set imagePath to POSIX file "{escaped_path}"
     tell application "Finder"
         set the clipboard to imagePath
     end tell
-
-    tell application "Codex"
-        activate
-    end tell
-
-    tell application "System Events"
-        repeat with i from 1 to 20
-            if exists process "Codex" then
-                tell process "Codex"
-                    if frontmost and (count windows) > 0 then exit repeat
-                end tell
-            end if
-            delay 0.2
-        end repeat
-
-        if not (exists process "Codex") then error "Codex process not available"
-        tell process "Codex"
-            if not frontmost then error "Codex is not frontmost"
-            if (count windows) = 0 then error "Codex window not available"
-
-            set windowPosition to position of window 1
-            set windowSize to size of window 1
-            set inputX to ((item 1 of windowPosition) + ((item 1 of windowSize) / 2)) as integer
-            set inputY to ((item 2 of windowPosition) + (item 2 of windowSize) - 55) as integer
-        end tell
-
-        click at {{inputX, inputY}}
-        delay 0.3
-        keystroke "v" using command down
-        delay {upload_delay:.1f}
-        key code 36
-    end tell
-
-    return "submitted"
     '''
+
+
+def build_image_applescript(image_path: str, upload_delay: float) -> str:
+    """保留给测试和兼容用途：实际运行会拆分点击与粘贴。"""
+    return (
+        build_image_clipboard_applescript(image_path)
+        + "\n"
+        + build_focus_applescript()
+        + "\n"
+        + build_submit_applescript(upload_delay)
+    )
+
+
+def run_applescript(script: str, timeout: int):
+    return subprocess.run(
+        ["osascript", "-e", script],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def ensure_click_helper() -> bool:
+    """编译本地点击助手。"""
+    if CLICK_HELPER.exists() and CLICK_HELPER.stat().st_mtime >= CLICK_HELPER_SOURCE.stat().st_mtime:
+        return True
+    result = subprocess.run(
+        [
+            "/usr/bin/clang",
+            str(CLICK_HELPER_SOURCE),
+            "-framework",
+            "ApplicationServices",
+            "-o",
+            str(CLICK_HELPER),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        print(f"❌ 编译点击助手失败: {(result.stderr or result.stdout).strip()}")
+        return False
+    return True
+
+
+def focus_codex_input() -> bool:
+    """激活 Codex，并用底层鼠标事件点击底部输入框。"""
+    if not ensure_click_helper():
+        return False
+    try:
+        result = run_applescript(build_focus_applescript(), timeout=8)
+    except subprocess.TimeoutExpired:
+        print("❌ 获取 Codex 输入框坐标超时")
+        return False
+    if result.returncode != 0:
+        print(f"❌ 获取 Codex 输入框坐标失败: {result.stderr.strip()}")
+        return False
+
+    try:
+        x, y = [part.strip() for part in result.stdout.strip().split(",", 1)]
+    except ValueError:
+        print(f"❌ Codex 输入框坐标格式异常: {result.stdout.strip()}")
+        return False
+
+    click = subprocess.run(
+        [str(CLICK_HELPER), x, y],
+        capture_output=True,
+        text=True,
+        timeout=3,
+    )
+    if click.returncode != 0:
+        print(f"❌ 点击 Codex 输入框失败: {(click.stderr or click.stdout).strip()}")
+        return False
+    time.sleep(0.3)
+    return True
 
 
 def set_clipboard(text: str) -> bool:
@@ -120,12 +177,15 @@ def input_image_to_codex(image_path: str, upload_delay: float = 5.0) -> bool:
         print(f"❌ 图片不存在: {path}")
         return False
 
-    script = build_image_applescript(str(path), upload_delay)
     try:
-        result = subprocess.run(
-            ["osascript", "-e", script],
-            capture_output=True,
-            text=True,
+        clipboard = run_applescript(build_image_clipboard_applescript(str(path)), timeout=8)
+        if clipboard.returncode != 0:
+            print(f"❌ 设置图片剪贴板失败: {clipboard.stderr.strip()}")
+            return False
+        if not focus_codex_input():
+            return False
+        result = run_applescript(
+            build_submit_applescript(upload_delay),
             timeout=max(20, int(upload_delay) + 15),
         )
         if result.returncode == 0:
@@ -160,14 +220,12 @@ def input_to_codex(text: str) -> bool:
             return False
         time.sleep(0.3)
 
-        # 2. AppleScript：激活 Codex → 确认窗口 → 粘贴 → 回车
-        script = build_applescript(calculate_paste_delay(text))
-
-        result = subprocess.run(
-            ['osascript', '-e', script],
-            capture_output=True,
-            text=True,
-            timeout=15
+        # 2. 激活 Codex → 点击底部输入框 → 粘贴 → 回车
+        if not focus_codex_input():
+            return False
+        result = run_applescript(
+            build_submit_applescript(calculate_paste_delay(text)),
+            timeout=15,
         )
 
         # 恢复原始剪贴板内容
