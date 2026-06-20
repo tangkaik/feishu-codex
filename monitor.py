@@ -20,10 +20,14 @@ LAST_CHECKPOINT_FILE = WORK_DIR / ".codex_monitor_last_id.txt"
 
 
 def get_codex_log_db():
-    new_path = Path.home() / ".codex" / "sqlite" / "logs_2.sqlite"
-    if new_path.exists():
-        return new_path
-    return Path.home() / ".codex" / "logs_2.sqlite"
+    candidates = [
+        Path.home() / ".codex" / "sqlite" / "logs_2.sqlite",
+        Path.home() / ".codex" / "logs_2.sqlite",
+    ]
+    existing = [path for path in candidates if path.exists()]
+    if existing:
+        return max(existing, key=lambda path: path.stat().st_mtime)
+    return candidates[-1]
 
 
 CODEX_LOG_DB = get_codex_log_db()

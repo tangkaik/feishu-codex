@@ -12,18 +12,25 @@ def sse(payload):
 
 
 class MonitorOutputExtractionTest(unittest.TestCase):
-    def test_prefers_new_codex_sqlite_log_location(self):
+    def test_prefers_most_recent_codex_log_location(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            new_db = home / ".codex" / "sqlite" / "logs_2.sqlite"
-            old_db = home / ".codex" / "logs_2.sqlite"
-            new_db.parent.mkdir(parents=True)
-            old_db.parent.mkdir(parents=True, exist_ok=True)
-            new_db.write_text("")
-            old_db.write_text("")
+            nested_db = home / ".codex" / "sqlite" / "logs_2.sqlite"
+            root_db = home / ".codex" / "logs_2.sqlite"
+            nested_db.parent.mkdir(parents=True)
+            root_db.parent.mkdir(parents=True, exist_ok=True)
+            nested_db.write_text("")
+            root_db.write_text("")
+            old_time = 1000
+            new_time = 2000
+            nested_db.touch()
+            root_db.touch()
+            import os
+            os.utime(nested_db, (old_time, old_time))
+            os.utime(root_db, (new_time, new_time))
 
             with patch.object(Path, "home", return_value=home):
-                self.assertEqual(monitor.get_codex_log_db(), new_db)
+                self.assertEqual(monitor.get_codex_log_db(), root_db)
 
     def test_checkpoint_file_is_separate_for_new_log_location(self):
         new_db = Path.home() / ".codex" / "sqlite" / "logs_2.sqlite"
