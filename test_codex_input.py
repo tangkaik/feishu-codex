@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import codex_input
 
@@ -14,13 +15,27 @@ class CodexInputTest(unittest.TestCase):
     def test_paste_delay_is_capped(self):
         self.assertEqual(codex_input.calculate_paste_delay("x" * 100000), 3.0)
 
+    def test_target_app_defaults_to_chatgpt_when_codex_app_is_absent(self):
+        def fake_exists(path):
+            return str(path) == "/Applications/ChatGPT.app"
+
+        with patch("codex_input.Path.exists", fake_exists):
+            self.assertEqual(codex_input.get_target_app_name(), "ChatGPT")
+            self.assertEqual(codex_input.get_target_process_name(), "ChatGPT")
+
+    def test_target_app_can_be_overridden_by_environment(self):
+        with patch.dict("os.environ", {"FEISHU_CODEX_TARGET_APP": "Codex"}):
+            self.assertEqual(codex_input.get_target_app_name(), "Codex")
+            self.assertEqual(codex_input.get_target_process_name(), "Codex")
+
     def test_focus_applescript_returns_input_coordinates_without_clicking(self):
         script = codex_input.build_focus_applescript()
 
-        self.assertIn('process "Codex"', script)
+        self.assertIn('application "ChatGPT"', script)
+        self.assertIn('process "ChatGPT"', script)
         self.assertIn("frontmost", script)
         self.assertIn("count windows", script)
-        self.assertIn('error "Codex window not available"', script)
+        self.assertIn('error "ChatGPT window not available"', script)
         self.assertIn("as integer", script)
         self.assertNotIn("key code 53", script)
         self.assertNotIn("click at", script)

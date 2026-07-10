@@ -9,11 +9,30 @@
 import subprocess
 import sys
 import time
+import os
 from pathlib import Path
 
 WORK_DIR = Path(__file__).resolve().parent
 CLICK_HELPER_SOURCE = WORK_DIR / "click_helper.c"
 CLICK_HELPER = WORK_DIR / ".feishu_codex_click"
+
+
+def get_target_app_name() -> str:
+    override = os.environ.get("FEISHU_CODEX_TARGET_APP", "").strip()
+    if override:
+        return override
+    if Path("/Applications/ChatGPT.app").exists():
+        return "ChatGPT"
+    return "Codex"
+
+
+def get_target_process_name() -> str:
+    return os.environ.get("FEISHU_CODEX_TARGET_PROCESS", "").strip() or get_target_app_name()
+
+
+def applescript_string(value: str) -> str:
+    """转义 AppleScript 字符串。"""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def calculate_paste_delay(text: str) -> float:
@@ -23,25 +42,27 @@ def calculate_paste_delay(text: str) -> float:
 
 def build_focus_applescript() -> str:
     """激活 Codex 并返回底部输入框附近的屏幕坐标。"""
-    return '''
-    tell application "Codex"
+    app_name = applescript_string(get_target_app_name())
+    process_name = applescript_string(get_target_process_name())
+    return f'''
+    tell application "{app_name}"
         activate
     end tell
 
     tell application "System Events"
         repeat with i from 1 to 20
-            if exists process "Codex" then
-                tell process "Codex"
+            if exists process "{process_name}" then
+                tell process "{process_name}"
                     if frontmost and (count windows) > 0 then exit repeat
                 end tell
             end if
             delay 0.2
         end repeat
 
-        if not (exists process "Codex") then error "Codex process not available"
-        tell process "Codex"
-            if not frontmost then error "Codex is not frontmost"
-            if (count windows) = 0 then error "Codex window not available"
+        if not (exists process "{process_name}") then error "{process_name} process not available"
+        tell process "{process_name}"
+            if not frontmost then error "{process_name} is not frontmost"
+            if (count windows) = 0 then error "{process_name} window not available"
 
             set windowPosition to position of window 1
             set windowSize to size of window 1
@@ -56,25 +77,27 @@ def build_focus_applescript() -> str:
 
 def build_dismiss_edit_applescript() -> str:
     """返回编辑模式中“取消”按钮常见位置的坐标。"""
-    return '''
-    tell application "Codex"
+    app_name = applescript_string(get_target_app_name())
+    process_name = applescript_string(get_target_process_name())
+    return f'''
+    tell application "{app_name}"
         activate
     end tell
 
     tell application "System Events"
         repeat with i from 1 to 20
-            if exists process "Codex" then
-                tell process "Codex"
+            if exists process "{process_name}" then
+                tell process "{process_name}"
                     if frontmost and (count windows) > 0 then exit repeat
                 end tell
             end if
             delay 0.2
         end repeat
 
-        if not (exists process "Codex") then error "Codex process not available"
-        tell process "Codex"
-            if not frontmost then error "Codex is not frontmost"
-            if (count windows) = 0 then error "Codex window not available"
+        if not (exists process "{process_name}") then error "{process_name} process not available"
+        tell process "{process_name}"
+            if not frontmost then error "{process_name} is not frontmost"
+            if (count windows) = 0 then error "{process_name} window not available"
 
             set windowPosition to position of window 1
             set windowSize to size of window 1
@@ -103,11 +126,6 @@ def build_submit_applescript(paste_delay: float) -> str:
 def build_applescript(paste_delay: float) -> str:
     """保留给测试和兼容用途：实际运行会拆分点击与粘贴。"""
     return build_focus_applescript() + "\n" + build_submit_applescript(paste_delay)
-
-
-def applescript_string(value: str) -> str:
-    """转义 AppleScript 字符串。"""
-    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def build_image_clipboard_applescript(image_path: str) -> str:
