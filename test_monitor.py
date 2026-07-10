@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -111,6 +112,47 @@ class MonitorOutputExtractionTest(unittest.TestCase):
 
         self.assertEqual(checkpoint, 100)
         self.assertEqual(output, "")
+
+    def test_detects_completion_events(self):
+        rows = [
+            (101, 0, "INFO", "target", "app-server event: item/completed targeted_connections=1"),
+        ]
+
+        self.assertTrue(monitor.rows_have_completion(rows))
+
+    def test_lists_only_new_generated_images(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old_image = root / "old.png"
+            new_image = root / "nested" / "new.PNG"
+            ignored = root / "note.txt"
+            new_image.parent.mkdir()
+            old_image.write_bytes(b"old")
+            new_image.write_bytes(b"new")
+            ignored.write_text("nope")
+            os.utime(old_image, (1000, 1000))
+            os.utime(new_image, (2000, 2000))
+
+            images = monitor.list_new_generated_images(root, since_mtime=1500)
+
+        self.assertEqual(images, [new_image])
+
+    def test_send_new_generated_images_updates_checkpoint_after_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "images"
+            root.mkdir()
+            checkpoint = Path(tmp) / "image-checkpoint.txt"
+            image = root / "new.png"
+            image.write_bytes(b"new")
+            os.utime(image, (2000, 2000))
+            checkpoint.write_text("1500")
+            sent = []
+
+            with patch.object(monitor.send_image_to_feishu, "send_image", lambda path: sent.append(Path(path)) or True):
+                monitor.send_new_generated_images(root, checkpoint)
+
+            self.assertEqual(sent, [image])
+            self.assertEqual(float(checkpoint.read_text()), 2000.0)
 
 
 if __name__ == "__main__":

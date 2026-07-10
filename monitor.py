@@ -13,12 +13,16 @@ import re
 from pathlib import Path
 
 import send_to_feishu
+import send_image_to_feishu
 
 # ========== 配置 ==========
 
 POLL_INTERVAL = 2  # 秒
 WORK_DIR = Path(__file__).resolve().parent
 LAST_CHECKPOINT_FILE = WORK_DIR / ".codex_monitor_last_id.txt"
+IMAGE_CHECKPOINT_FILE = WORK_DIR / ".codex_monitor_last_image_mtime.txt"
+GENERATED_IMAGES_DIR = Path.home() / ".codex" / "generated_images"
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 def get_codex_log_db():
@@ -56,6 +60,57 @@ def get_last_checked_id(log_db=None):
 def save_last_checked_id(last_id, log_db=None):
     """保存检查到的最大日志 ID"""
     get_checkpoint_file(log_db).write_text(str(last_id))
+
+
+def get_last_image_mtime(checkpoint_file=IMAGE_CHECKPOINT_FILE):
+    """获取上次已发送图片的最大修改时间。"""
+    checkpoint_file = Path(checkpoint_file)
+    if checkpoint_file.exists():
+        try:
+            return float(checkpoint_file.read_text().strip())
+        except Exception:
+            pass
+    return time.time()
+
+
+def save_last_image_mtime(last_mtime, checkpoint_file=IMAGE_CHECKPOINT_FILE):
+    Path(checkpoint_file).write_text(str(float(last_mtime)))
+
+
+def list_new_generated_images(image_root=GENERATED_IMAGES_DIR, since_mtime=None):
+    """列出 checkpoint 之后新生成的图片。"""
+    image_root = Path(image_root).expanduser()
+    if not image_root.exists():
+        return []
+
+    since_mtime = float(since_mtime or 0)
+    images = []
+    for path in image_root.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in IMAGE_SUFFIXES:
+            continue
+        if path.stat().st_mtime > since_mtime:
+            images.append(path)
+    return sorted(images, key=lambda path: (path.stat().st_mtime, str(path)))
+
+
+def send_new_generated_images(image_root=GENERATED_IMAGES_DIR, checkpoint_file=IMAGE_CHECKPOINT_FILE):
+    """发送新生成的图片到飞书，并推进图片 checkpoint。"""
+    checkpoint_file = Path(checkpoint_file)
+    last_mtime = get_last_image_mtime(checkpoint_file)
+    images = list_new_generated_images(image_root, last_mtime)
+    if not images:
+        return 0
+
+    sent_count = 0
+    for image_path in images:
+        print(f"🖼️ 发送生成图片到飞书: {image_path}")
+        if not send_image_to_feishu.send_image(image_path):
+            print(f"❌ 图片发送失败，保留 checkpoint: {image_path}")
+            break
+        sent_count += 1
+        last_mtime = max(last_mtime, image_path.stat().st_mtime)
+        save_last_image_mtime(last_mtime, checkpoint_file)
+    return sent_count
 
 
 def send_feishu(text: str) -> bool:
@@ -183,6 +238,15 @@ def collect_output_from_rows(rows, last_id):
     return new_max_id, ""
 
 
+def rows_have_completion(rows):
+    """判断新增日志是否包含一轮输出完成事件。"""
+    for row in rows:
+        body = row[4] if len(row) > 4 else ""
+        if body and ("turn/completed" in body or "response.completed" in body or "item/completed" in body):
+            return True
+    return False
+
+
 def check_for_turn_completed():
     """检查日志中是否有新的 turn/completed 事件"""
     log_db = get_codex_log_db()
@@ -218,11 +282,16 @@ def check_for_turn_completed():
             return
 
         new_max_id, full_output = collect_output_from_rows(rows, last_id)
+        saw_completion = rows_have_completion(rows)
 
         # 如果检测到完整的 turn，发送飞书
         if full_output:
             print(f"📤 发送 {len(full_output)} 字符到飞书...")
             send_feishu(full_output)
+        if saw_completion:
+            sent_images = send_new_generated_images()
+            if sent_images:
+                print(f"✅ 已发送 {sent_images} 张生成图片到飞书")
 
         # 更新检查点
         save_last_checked_id(new_max_id, log_db)

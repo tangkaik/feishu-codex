@@ -10,6 +10,7 @@ __pycache__/
 .last_feishu_msg.json
 .codex_monitor_last_id.txt
 .codex_monitor_last_id_sqlite.txt
+.codex_monitor_last_image_mtime.txt
 .pending_feishu_turns.json
 feishu_to_codex_daemon.pid
 .feishu_codex_click
