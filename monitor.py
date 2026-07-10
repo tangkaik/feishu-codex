@@ -8,6 +8,8 @@ import sqlite3
 import time
 import sys
 import json
+import ast
+import re
 from pathlib import Path
 
 import send_to_feishu
@@ -116,6 +118,22 @@ def extract_delta_from_log(log_body: str) -> str:
     return ""
 
 
+def extract_debug_output_from_log(log_body: str) -> str:
+    """从新版 Rust debug 风格 Output item 日志中提取输出文本。"""
+    if not log_body or "Output item item=Message" not in log_body:
+        return ""
+
+    match = re.search(r'OutputText \{ text: "((?:\\.|[^"\\])*)"', log_body, re.S)
+    if not match:
+        return ""
+
+    raw_text = match.group(1)
+    try:
+        return ast.literal_eval(f'"{raw_text}"').strip()
+    except Exception:
+        return raw_text.replace("\\n", "\n").replace('\\"', '"').strip()
+
+
 def collect_output_from_rows(rows, last_id):
     """从新增日志行中收集完整输出，并决定检查点应推进到哪里。"""
     new_max_id = last_id
@@ -130,7 +148,7 @@ def collect_output_from_rows(rows, last_id):
         if not body:
             continue
 
-        if "turn/completed" in body or "response.completed" in body:
+        if "turn/completed" in body or "response.completed" in body or "item/completed" in body:
             saw_completion = True
             if "turn/completed" in body:
                 print(f"\n🔔 检测到 turn/completed 事件 (id={row_id})")
@@ -148,6 +166,13 @@ def collect_output_from_rows(rows, last_id):
             if delta:
                 output_buffer.append(delta)
                 saw_streaming_output = True
+
+        if "Output item item=Message" in body:
+            output = extract_debug_output_from_log(body)
+            if output:
+                output_buffer.append(output)
+                saw_legacy_done_output = True
+                print(f"📝 提取到新版输出 ({len(output)} 字符)")
 
     if output_buffer and (saw_legacy_done_output or saw_completion):
         return new_max_id, "".join(output_buffer).strip()

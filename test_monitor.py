@@ -61,6 +61,15 @@ class MonitorOutputExtractionTest(unittest.TestCase):
 
         self.assertEqual(monitor.extract_delta_from_log(body), "流式片段")
 
+    def test_extracts_debug_output_item_message_text(self):
+        body = (
+            'handle_output_item_done: Output item item=Message { '
+            'role: "assistant", content: [OutputText { text: "第一行\\n第二行" }], '
+            'phase: Some(FinalAnswer) }'
+        )
+
+        self.assertEqual(monitor.extract_debug_output_from_log(body), "第一行\n第二行")
+
     def test_completed_streaming_rows_are_joined_and_sent(self):
         rows = [
             (101, 0, "INFO", "target", sse({"type": "response.output_text.delta", "delta": "阿呆"})),
@@ -72,6 +81,25 @@ class MonitorOutputExtractionTest(unittest.TestCase):
 
         self.assertEqual(checkpoint, 103)
         self.assertEqual(output, "阿呆收到")
+
+    def test_debug_output_item_with_item_completed_is_sent(self):
+        rows = [
+            (
+                101,
+                0,
+                "INFO",
+                "target",
+                'handle_output_item_done: Output item item=Message { '
+                'role: "assistant", content: [OutputText { text: "新版输出" }], '
+                'phase: Some(FinalAnswer) }',
+            ),
+            (102, 0, "INFO", "target", "app-server event: item/completed targeted_connections=1"),
+        ]
+
+        checkpoint, output = monitor.collect_output_from_rows(rows, last_id=100)
+
+        self.assertEqual(checkpoint, 102)
+        self.assertEqual(output, "新版输出")
 
     def test_incomplete_streaming_rows_keep_checkpoint_before_output(self):
         rows = [
